@@ -1,6 +1,7 @@
 const inquirer = require("inquirer");
 const mysql = require("mysql");
 const info = require("./connection-info");
+
 const connection = mysql.createConnection({
 	host: info.host,
 	port: 3306,
@@ -8,12 +9,15 @@ const connection = mysql.createConnection({
 	password: info.password,
 	database: info.dbName,
 });
+
 connection.connect((err) => {
 	if (err) throw err;
 	console.log("connected to db");
 	startUp();
 });
+
 let currentUser;
+
 function startUp() {
 	if (!currentUser) {
 		inquirer
@@ -44,6 +48,7 @@ function startUp() {
 		startAsUser();
 	}
 }
+
 function startAsUser() {
 	console.log("Logged in as " + currentUser.username);
 	inquirer
@@ -92,6 +97,7 @@ function userPost() {
 			}
 		});
 }
+
 function postItemToDatabase(item) {
 	const query = connection.query(
 		"INSERT INTO items SET ?",
@@ -124,6 +130,7 @@ function itemIsInvalid(input) {
 	}
 	return false;
 }
+
 async function userBid() {
 	let items = await getItems();
 	let itemChoices = items.map((e, i) => ({ name: e.title, value: i }));
@@ -147,6 +154,7 @@ async function userBid() {
 			});
 	}
 }
+
 function enterBidAmount(item) {
 	inquirer
 		.prompt([
@@ -158,6 +166,7 @@ function enterBidAmount(item) {
 		])
 		.then((response) => {
 			if (response.bid > item.currentbid) {
+				// Should probably await these
 				addBidToBids(item, response.bid);
 				updateItem(item, response.bid);
 				startAsUser();
@@ -167,12 +176,14 @@ function enterBidAmount(item) {
 			}
 		});
 }
+
 function updateItem(item, bid) {
 	const query = connection.query("UPDATE items SET ? WHERE ? ", [
 		{ currentbid: bid, currentwinnerid: currentUser.id },
 		{ id: item.id },
 	]);
 }
+
 function addBidToBids(item, bid) {
 	const query = connection.query("INSERT INTO bids SET ? ", [
 		{ amount: bid, userid: currentUser.id, itemid: item.id },
@@ -216,6 +227,7 @@ async function attemptLogin() {
 		console.log("There Are no Users!");
 		return false;
 	}
+
 	let response = await inquirer.prompt([
 		{
 			name: "try",
@@ -238,8 +250,11 @@ async function attemptLogin() {
 			when: (answers) => answers.try,
 		},
 	]);
+
 	if (!response.try) startUp();
+
 	let selectedUser = users.find((e) => e.username === response.username);
+
 	if (selectedUser) {
 		if (response.password === selectedUser.password) {
 			return selectedUser;
@@ -257,7 +272,7 @@ async function attemptLogin() {
 
 async function userCreateAccount() {
 	let users = await getUsers();
-	console.log(users);
+
 	inquirer
 		.prompt([
 			{
@@ -304,6 +319,7 @@ async function userCreateAccount() {
 			}
 		});
 }
+
 async function getUsers() {
 	let users = await (() => {
 		return new Promise((resolve, reject) => {
@@ -318,6 +334,7 @@ async function getUsers() {
 			});
 		});
 	})();
+
 	return [...users];
 }
 
