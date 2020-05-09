@@ -42,7 +42,6 @@ function startUp() {
 }
 function startAsUser() {
 	console.log("Logged in as " + currentUser.username);
-	let items = getItems().map((e, i) => ({ name: e.title, value: i }));
 	inquirer
 		.prompt([
 			{
@@ -61,6 +60,60 @@ function startAsUser() {
 			} else if (response.do === 2) {
 				userPost();
 			}
+		});
+}
+
+function userPost() {
+	let categories = ["cat 1", "cat 2", "cat 3", "cat 4"];
+	let categoryChoices = categories.map((e, i) => ({ name: e, value: i }));
+	inquirer
+		.prompt([
+			{ name: "title", message: "Title?" },
+			{ name: "summary", message: "Summary?" },
+			{
+				name: "category",
+				message: "Category?",
+				type: "list",
+				choices: categoryChoices,
+			},
+			{ name: "minbid", message: "Minimum Bid?", type: "number" },
+		])
+		.then((response) => {
+			let invalid = isItemInvalid(response);
+			if (invalid) {
+				console.log(invalid);
+			} else {
+				// post to db
+			}
+		});
+}
+
+function itemIsInvalid(input) {
+	if (input.title.length > 50) {
+		return "Item name too long!";
+	}
+	if (item.summary.length > 100) {
+		return "Summary length too long!";
+	}
+	if (isNaN(minbid) || minbid < 0) {
+		return "Invalid Minimum Bid!";
+	}
+	return false;
+}
+function userBid() {
+	let items = getItems();
+	let itemChoices = items.map((e, i) => ({ name: e.title, value: i }));
+	inquirer
+		.prompt([
+			{
+				name: "choice",
+				message: "Which item would you like to see?",
+				type: "list",
+				choices: itemChoices,
+			},
+		])
+		.then((response) => {
+			displayItemInfo(items[response.choice]);
 		});
 }
 
@@ -153,11 +206,13 @@ function userCreateAccount() {
 			{
 				name: "password",
 				message: "Password?",
+				type: "password",
 				when: (answers) => answers.try,
 			},
 			{
 				name: "check",
 				message: "Password again?",
+				type: "password",
 				when: (answers) => answers.try,
 			},
 		])
