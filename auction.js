@@ -65,7 +65,7 @@ function startAsUser() {
 
 function userPost() {
 	let categories = ["cat 1", "cat 2", "cat 3", "cat 4"];
-	let categoryChoices = categories.map((e, i) => ({ name: e, value: i }));
+	//let categoryChoices = categories.map((e, i) => ({ name: e, value: i }));
 	inquirer
 		.prompt([
 			{ name: "title", message: "Title?" },
@@ -74,18 +74,38 @@ function userPost() {
 				name: "category",
 				message: "Category?",
 				type: "list",
-				choices: categoryChoices,
+				choices: categories,
 			},
 			{ name: "minbid", message: "Minimum Bid?", type: "number" },
 		])
 		.then((response) => {
-			let invalid = isItemInvalid(response);
+			let invalid = itemIsInvalid(response);
 			if (invalid) {
 				console.log(invalid);
+				userPost();
 			} else {
-				// post to db
+				postItemToDatabase(response);
 			}
 		});
+}
+function postItemToDatabase(item) {
+	const query = connection.query(
+		"INSERT INTO items SET ?",
+		{
+			title: item.title,
+			summary: item.summary,
+			category: item.category,
+			minbid: item.minbid,
+			currentbid: item.minbid,
+			currentwinner: null,
+			posterid: currentUser.id,
+		},
+		(err, res) => {
+			if (err) throw err;
+			console.log("Item added!");
+			startAsUser();
+		}
+	);
 }
 
 function itemIsInvalid(input) {
@@ -113,7 +133,28 @@ function userBid() {
 			},
 		])
 		.then((response) => {
-			displayItemInfo(items[response.choice]);
+			let item = items[response.choice];
+			displayItemInfo(item);
+			enterBidAmount(item);
+		});
+}
+function enterBidAmount(item) {
+	inquirer
+		.prompt([
+			{
+				name: "bid",
+				type: "number",
+				message: "How much would you like to bid?",
+			},
+		])
+		.then((response) => {
+			if (response.bid > item.currentbid) {
+				addBidToBids();
+				updateItem();
+			} else {
+				console.log("Sorry! That is not a high enough bid!");
+				startAsUser();
+			}
 		});
 }
 
