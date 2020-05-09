@@ -31,7 +31,11 @@ function startUp() {
 			.then(async (response) => {
 				if (response.login === 1) {
 					currentUser = await attemptLogin();
-					console.log(currentUser);
+					if (!currentUser) {
+						startUp();
+					} else {
+						startAsUser();
+					}
 				} else {
 					userCreateAccount();
 				}
@@ -97,7 +101,7 @@ function postItemToDatabase(item) {
 			category: item.category,
 			minbid: item.minbid,
 			currentbid: item.minbid,
-			currentwinner: null,
+			currentwinnerid: null,
 			posterid: currentUser.id,
 		},
 		(err, res) => {
@@ -112,31 +116,36 @@ function itemIsInvalid(input) {
 	if (input.title.length > 50) {
 		return "Item name too long!";
 	}
-	if (item.summary.length > 100) {
+	if (input.summary.length > 100) {
 		return "Summary length too long!";
 	}
-	if (isNaN(minbid) || minbid < 0) {
+	if (isNaN(input.minbid) || input.minbid < 0) {
 		return "Invalid Minimum Bid!";
 	}
 	return false;
 }
-function userBid() {
-	let items = getItems();
+async function userBid() {
+	let items = await getItems();
 	let itemChoices = items.map((e, i) => ({ name: e.title, value: i }));
-	inquirer
-		.prompt([
-			{
-				name: "choice",
-				message: "Which item would you like to see?",
-				type: "list",
-				choices: itemChoices,
-			},
-		])
-		.then((response) => {
-			let item = items[response.choice];
-			displayItemInfo(item);
-			enterBidAmount(item);
-		});
+	if (items.length === 0) {
+		console.log("There are no items posted!");
+		startAsUser();
+	} else {
+		inquirer
+			.prompt([
+				{
+					name: "choice",
+					message: "Which item would you like to see?",
+					type: "list",
+					choices: itemChoices,
+				},
+			])
+			.then((response) => {
+				let item = items[response.choice];
+				displayItemInfo(item);
+				enterBidAmount(item);
+			});
+	}
 }
 function enterBidAmount(item) {
 	inquirer
@@ -149,29 +158,50 @@ function enterBidAmount(item) {
 		])
 		.then((response) => {
 			if (response.bid > item.currentbid) {
-				addBidToBids();
-				updateItem();
+				addBidToBids(item, response.bid);
+				updateItem(item, response.bid);
+				startAsUser();
 			} else {
 				console.log("Sorry! That is not a high enough bid!");
 				startAsUser();
 			}
 		});
 }
+function updateItem(item, bid) {
+	const query = connection.query("UPDATE items SET ? WHERE ? ", [
+		{ currentbid: bid, currentwinnerid: currentUser.id },
+		{ id: item.id },
+	]);
+}
+function addBidToBids(item, bid) {
+	const query = connection.query("INSERT INTO bids SET ? ", [
+		{ amount: bid, userid: currentUser.id, itemid: item.id },
+	]);
+}
 
-function getItems() {
-	let items = [];
-	connection.query("SELECT * FROM items", (err, res) => {
-		if (err) throw err;
-		items = res.map((e) => ({
-			id: e.id,
-			title: e.title,
-			summary: e.summary,
-			category: e.category,
-			minbid: e.minbid,
-			currentbid: e.currentbid,
-		}));
-	});
-	return items;
+async function getItems() {
+	let itemsPromise = (() => {
+		return new Promise((resolve, reject) => {
+			connection.query("SELECT * FROM items", (err, res) => {
+				if (err) throw err;
+
+				// Probably not great to store password like this but here we are
+				resolve(
+					res.map((e) => ({
+						id: e.id,
+						title: e.title,
+						summary: e.summary,
+						category: e.category,
+						minbid: e.minbid,
+						currentbid: e.currentbid,
+					}))
+				);
+			});
+		});
+	})();
+	let items = await itemsPromise;
+
+	return [...items];
 }
 
 function displayItemInfo(item) {
@@ -180,12 +210,11 @@ function displayItemInfo(item) {
 }
 
 async function attemptLogin() {
-	let users = getUsers();
+	let users = await getUsers();
 	let attempted;
-	if (!users) {
+	if (users.length === 0) {
 		console.log("There Are no Users!");
-		startUp();
-		return;
+		return false;
 	}
 	let response = await inquirer.prompt([
 		{
@@ -209,7 +238,7 @@ async function attemptLogin() {
 			when: (answers) => answers.try,
 		},
 	]);
-
+	if (!response.try) startUp();
 	let selectedUser = users.find((e) => e.username === response.username);
 	if (selectedUser) {
 		if (response.password === selectedUser.password) {
@@ -217,17 +246,18 @@ async function attemptLogin() {
 		} else {
 			console.log("Not a valid username/password combination");
 			attempted = true;
-			attemptLogin();
+			return false;
 		}
 	} else {
 		console.log("Not a valid username/password combination");
 		attempted = true;
-		attemptLogin();
+		return false;
 	}
 }
 
-function userCreateAccount() {
-	let users = getUsers();
+async function userCreateAccount() {
+	let users = await getUsers();
+	console.log(users);
 	inquirer
 		.prompt([
 			{
@@ -274,26 +304,31 @@ function userCreateAccount() {
 			}
 		});
 }
-function getUsers() {
-	let users = [];
-	connection.query("SELECT * FROM users", (err, res) => {
-		if (err) throw err;
-		res.forEach((e) =>
-			// Probably not great to store password like this but here we are
-			users.push({ id: e.id, username: e.username, password: e.password })
-		);
-	});
-	return users;
+async function getUsers() {
+	let users = await (() => {
+		return new Promise((resolve, reject) => {
+			connection.query("SELECT * FROM users", (err, res) => {
+				if (err) throw err;
+				resolve(
+					res.map((e) =>
+						// Probably not great to store password like this but here we are
+						({ id: e.id, username: e.username, password: e.password })
+					)
+				);
+			});
+		});
+	})();
+	return [...users];
 }
 
-function dbCreateAccount(username, password) {
+async function dbCreateAccount(username, password) {
 	const query = connection.query(
 		"INSERT INTO users SET ?",
 		{ username, password },
 		(err, res) => {
 			if (err) throw err;
 			console.log("user added!");
-			console.log(getUsers());
+			startUp();
 		}
 	);
 }
