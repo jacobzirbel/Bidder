@@ -15,26 +15,74 @@ connection.connect((err) => {
 });
 let currentUser;
 function startUp() {
+	if (!currentUser) {
+		inquirer
+			.prompt([
+				{
+					name: "login",
+					type: "list",
+					message: "Login or Create Account",
+					choices: [
+						{ name: "Log In", value: 1 },
+						{ name: "Create Account", value: 2 },
+					],
+				},
+			])
+			.then(async (response) => {
+				if (response.login === 1) {
+					currentUser = await attemptLogin();
+					console.log(currentUser);
+				} else {
+					userCreateAccount();
+				}
+			});
+	} else {
+		startAsUser();
+	}
+}
+function startAsUser() {
+	console.log("Logged in as " + currentUser.username);
+	let items = getItems().map((e, i) => ({ name: e.title, value: i }));
 	inquirer
 		.prompt([
 			{
-				name: "login",
+				name: "do",
+				message: "What would you like to do?",
 				type: "list",
-				message: "Login or Create Account",
 				choices: [
-					{ name: "Log In", value: 1 },
-					{ name: "Create Account", value: 2 },
+					{ name: "BID", value: 1 },
+					{ name: "POST", value: 2 },
 				],
 			},
 		])
-		.then(async (response) => {
-			if (response.login === 1) {
-				currentUser = await attemptLogin();
-				console.log(currentUser);
-			} else {
-				userCreateAccount();
+		.then((response) => {
+			if (response.do === 1) {
+				userBid();
+			} else if (response.do === 2) {
+				userPost();
 			}
 		});
+}
+
+function getItems() {
+	let items = [];
+	connection.query("SELECT * FROM items", (err, res) => {
+		if (err) throw err;
+		items = res.map((e) => ({
+			id: e.id,
+			title: e.title,
+			summary: e.summary,
+			category: e.category,
+			minbid: e.minbid,
+			currentbid: e.currentbid,
+		}));
+	});
+	return items;
+}
+
+function displayItemInfo(item) {
+	let info = `${item.title}\nSummary: ${item.summary}\nCategory: ${item.category}\nStarting bid: ${item.minbid}\nCurrent Bid: ${item.currentbid}`;
+	console.log(info);
 }
 
 async function attemptLogin() {
